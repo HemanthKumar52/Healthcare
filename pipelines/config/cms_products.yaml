@@ -1,0 +1,102 @@
+products:
+  - product:
+      name: "CMS Medicare Claims Analysis"
+      slug: "cms-claims-analysis"
+      domain: "financial"
+      description: "CMS DE-SynPUF Medicare claims analysis combining beneficiary demographics, chronic conditions, inpatient/outpatient utilization, and cost metrics with risk tier classification"
+      owner: "revenue-cycle-team"
+      steward: "finance-lead"
+      sensitivity: "no_phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "financial"
+      table: "cms_claims_analysis"
+      format: "delta"
+    refresh:
+      cadence: "monthly"
+      sla_hour: 12
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["DESYNPUF_ID", "gender", "total_claim_count", "total_payment", "risk_tier"]
+          threshold: 0.98
+        - metric: "uniqueness"
+          columns: ["DESYNPUF_ID"]
+          threshold: 1.0
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 750
+        - metric: "value_range"
+          column: "total_payment"
+          min: 0
+          max: 500000
+        - metric: "value_range"
+          column: "chronic_condition_count"
+          min: 0
+          max: 11
+    lineage:
+      sources:
+        - "bronze.cms_beneficiary_summary"
+        - "bronze.cms_inpatient_claims"
+        - "bronze.cms_outpatient_claims"
+      transforms:
+        - "Aggregate inpatient claims per beneficiary (count, payment, LOS, providers)"
+        - "Aggregate outpatient claims per beneficiary (count, payment, providers)"
+        - "Join with beneficiary demographics and chronic condition flags"
+        - "Calculate total costs, deductibles, coinsurance, out-of-pocket"
+        - "Count chronic conditions and assign risk tier (High/Medium/Low/Healthy)"
+        - "Map gender and race codes to labels"
+    tags:
+      contains_phi: "false"
+      source: "cms_de_synpuf"
+      business_unit: "revenue-cycle"
+      data_period: "2008-2010"
+
+  - product:
+      name: "CMS Prescription Drug Analysis"
+      slug: "cms-prescription-analysis"
+      domain: "financial"
+      description: "CMS prescription drug utilization analysis with per-beneficiary metrics, polypharmacy flags, top drug identification, and insurance coverage rates"
+      owner: "pharmacy-analytics-team"
+      steward: "pharmacy-lead"
+      sensitivity: "no_phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "financial"
+      table: "cms_prescription_analysis"
+      format: "delta"
+    refresh:
+      cadence: "monthly"
+      sla_hour: 12
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["DESYNPUF_ID", "total_prescriptions", "total_rx_cost", "unique_drugs"]
+          threshold: 0.95
+        - metric: "uniqueness"
+          columns: ["DESYNPUF_ID"]
+          threshold: 1.0
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 750
+        - metric: "value_range"
+          column: "total_rx_cost"
+          min: 0
+          max: 200000
+    lineage:
+      sources:
+        - "bronze.cms_beneficiary_summary"
+        - "bronze.cms_prescription_events"
+      transforms:
+        - "Aggregate prescriptions per beneficiary (count, cost, unique drugs)"
+        - "Identify most prescribed drug per beneficiary via window ranking"
+        - "Join with beneficiary demographics and chronic conditions"
+        - "Flag polypharmacy (5+ unique drugs) and high-cost (>$10K)"
+        - "Calculate insurance coverage percentage"
+    tags:
+      contains_phi: "false"
+      source: "cms_de_synpuf"
+      business_unit: "pharmacy-analytics"
+      data_period: "2008-2010"

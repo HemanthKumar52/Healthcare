@@ -1,0 +1,51 @@
+products:
+  - product:
+      name: "CDC Mortality Trend Analysis"
+      slug: "cdc-mortality-analysis"
+      domain: "research"
+      description: "CDC WONDER mortality trend analysis with state-level leading cause rankings, year-over-year changes, demographic rate calculations, and gender disparity ratios"
+      owner: "research-data-team"
+      steward: "research-lead"
+      sensitivity: "no_phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "research"
+      table: "cdc_mortality_analysis"
+      format: "delta"
+    refresh:
+      cadence: "monthly"
+      sla_hour: 12
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["state", "year", "cause_category", "total_deaths", "mortality_rate_per_100k"]
+          threshold: 0.98
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 750
+        - metric: "value_range"
+          column: "mortality_rate_per_100k"
+          min: 0
+          max: 50000
+        - metric: "value_range"
+          column: "cause_rank"
+          min: 1
+          max: 15
+    lineage:
+      sources:
+        - "bronze.cdc_wonder_mortality"
+      transforms:
+        - "Aggregate deaths by state, year, and cause category"
+        - "Calculate mortality rate per 100,000 population"
+        - "Rank causes of death per state-year using window functions"
+        - "Compute year-over-year change percentage"
+        - "Calculate gender-specific mortality rates"
+        - "Compute male-to-female disparity ratio"
+    tags:
+      contains_phi: "false"
+      source: "cdc_wonder"
+      hipaa_certified: "true"
+      business_unit: "research"
+      data_period: "2015-2023"
+      geographic_scope: "all_us_states"
