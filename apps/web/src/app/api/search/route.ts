@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
 
     const results = products.map((p) => ({
       ...p,
+      sizeBytes: p.sizeBytes ? Number(p.sizeBytes) : null,
       averageRating: ratingMap.get(p.id) ?? null,
     }));
 

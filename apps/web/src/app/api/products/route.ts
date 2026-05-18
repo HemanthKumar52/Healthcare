@@ -53,8 +53,14 @@ export async function GET(request: NextRequest) {
       prisma.dataProduct.count({ where }),
     ]);
 
+    // Convert BigInt fields to Number for JSON serialization
+    const serialized = products.map((p) => ({
+      ...p,
+      sizeBytes: p.sizeBytes ? Number(p.sizeBytes) : null,
+    }));
+
     return NextResponse.json({
-      data: products,
+      data: serialized,
       pagination: {
         page: filter.page,
         limit: filter.limit,

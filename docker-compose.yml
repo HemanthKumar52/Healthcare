@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: hdm_password
       POSTGRES_DB: healthcare_marketplace
     ports:
-      - "5432:5432"
+      - "5450:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
