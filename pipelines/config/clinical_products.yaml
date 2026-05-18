@@ -1,0 +1,152 @@
+products:
+  - product:
+      name: "Patient Visit Summary"
+      slug: "patient-visit-summary"
+      domain: "clinical"
+      description: "Aggregated view of patient encounters with diagnoses, procedures, and outcomes including length of stay, readmission flags, and age at visit"
+      owner: "clinical-data-team"
+      steward: "dr-smith"
+      sensitivity: "phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "clinical"
+      table: "patient_visit_summary"
+      format: "delta"
+    refresh:
+      cadence: "daily"
+      sla_hour: 6
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["patient_id", "encounter_id", "encounter_date", "primary_diagnosis_code"]
+          threshold: 0.98
+        - metric: "uniqueness"
+          columns: ["encounter_id"]
+          threshold: 1.0
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 26
+        - metric: "value_range"
+          column: "age_at_visit"
+          min: 0
+          max: 120
+        - metric: "referential_integrity"
+          column: "patient_id"
+          reference_table: "healthcare_marketplace.bronze.raw_patients"
+          reference_column: "patient_id"
+          threshold: 0.99
+    lineage:
+      sources:
+        - "bronze.raw_patients"
+        - "bronze.raw_encounters"
+        - "bronze.raw_diagnoses"
+        - "bronze.raw_procedures"
+      transforms:
+        - "Join encounters with patients on patient_id"
+        - "Determine primary diagnosis per encounter (earliest by date)"
+        - "Count diagnoses and procedures per encounter"
+        - "Calculate length_of_stay_days and age_at_visit"
+        - "Flag readmissions within 30 days of prior discharge"
+        - "Filter null encounter_id, patient_id, and encounter_date"
+    tags:
+      contains_phi: "true"
+      hipaa_certified: "true"
+      business_unit: "clinical-analytics"
+
+  - product:
+      name: "Lab Results Analytics"
+      slug: "lab-analytics"
+      domain: "clinical"
+      description: "Lab test results enriched with patient demographics, abnormal flags, critical indicators, and test categorization"
+      owner: "clinical-data-team"
+      steward: "dr-johnson"
+      sensitivity: "phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "clinical"
+      table: "lab_analytics"
+      format: "delta"
+    refresh:
+      cadence: "daily"
+      sla_hour: 7
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["patient_id", "test_name", "result_value", "result_unit"]
+          threshold: 0.95
+        - metric: "uniqueness"
+          columns: ["lab_result_id"]
+          threshold: 1.0
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 26
+        - metric: "referential_integrity"
+          column: "patient_id"
+          reference_table: "healthcare_marketplace.bronze.raw_patients"
+          reference_column: "patient_id"
+          threshold: 0.99
+    lineage:
+      sources:
+        - "bronze.raw_lab_results"
+        - "bronze.raw_patients"
+      transforms:
+        - "Join lab_results with patient demographics on patient_id"
+        - "Compute age_at_test from date_of_birth and test_date"
+        - "Extract numeric result value for range comparison"
+        - "Calculate abnormal_flag (LOW/HIGH/NORMAL) from normal ranges"
+        - "Flag critical results (>2x upper or <0.5x lower range)"
+        - "Categorize tests into clinical categories (Metabolic, Hematology, etc.)"
+    tags:
+      contains_phi: "true"
+      business_unit: "clinical-analytics"
+
+  - product:
+      name: "Medication Summary"
+      slug: "medication-summary"
+      domain: "clinical"
+      description: "Prescription records enriched with patient demographics, prescribing doctor details, medication duration, and popularity ranking"
+      owner: "clinical-data-team"
+      steward: "dr-williams"
+      sensitivity: "phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "clinical"
+      table: "medication_summary"
+      format: "delta"
+    refresh:
+      cadence: "daily"
+      sla_hour: 7
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["patient_id", "medication_name", "dosage", "doctor_id"]
+          threshold: 0.95
+        - metric: "uniqueness"
+          columns: ["prescription_id"]
+          threshold: 1.0
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 26
+        - metric: "referential_integrity"
+          column: "doctor_id"
+          reference_table: "healthcare_marketplace.bronze.raw_doctors"
+          reference_column: "doctor_id"
+          threshold: 0.98
+    lineage:
+      sources:
+        - "bronze.raw_prescriptions"
+        - "bronze.raw_patients"
+        - "bronze.raw_doctors"
+      transforms:
+        - "Join prescriptions with patient demographics on patient_id"
+        - "Join with doctor information on doctor_id"
+        - "Calculate medication_duration_days and age_at_prescription"
+        - "Compute per-patient prescription sequence and totals"
+        - "Rank medications by global prescription frequency"
+        - "Flag active prescriptions (no end_date or end_date >= today)"
+    tags:
+      contains_phi: "true"
+      business_unit: "pharmacy-analytics"

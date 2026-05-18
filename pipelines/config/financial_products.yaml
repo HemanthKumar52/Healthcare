@@ -1,0 +1,99 @@
+products:
+  - product:
+      name: "Claims Analytics"
+      slug: "claims-analytics"
+      domain: "financial"
+      description: "Comprehensive claims analytics combining billing, insurance claims, and payments with denial rates, collection rates, and payment timing metrics"
+      owner: "revenue-cycle-team"
+      steward: "finance-lead"
+      sensitivity: "phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "financial"
+      table: "claims_analytics"
+      format: "delta"
+    refresh:
+      cadence: "daily"
+      sla_hour: 6
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["billing_id", "patient_id", "total_amount", "claim_status"]
+          threshold: 0.95
+        - metric: "uniqueness"
+          columns: ["billing_id"]
+          threshold: 0.99
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 26
+        - metric: "value_range"
+          column: "total_amount"
+          min: 0
+          max: 500000
+        - metric: "referential_integrity"
+          column: "patient_id"
+          reference_table: "healthcare_marketplace.bronze.raw_patients"
+          reference_column: "patient_id"
+          threshold: 0.99
+    lineage:
+      sources:
+        - "bronze.raw_billing"
+        - "bronze.raw_insurance_claims"
+        - "bronze.raw_payments"
+      transforms:
+        - "Aggregate payments per billing record"
+        - "Join billing with insurance claims on billing_id"
+        - "Join with payment summary on billing_id"
+        - "Compute denial flags, partial payment flags"
+        - "Calculate days_to_first_payment and days_to_adjudication"
+        - "Compute outstanding_balance and collection_rate"
+    tags:
+      contains_phi: "true"
+      business_unit: "revenue-cycle"
+
+  - product:
+      name: "Revenue Cycle Dashboard"
+      slug: "revenue-cycle"
+      domain: "financial"
+      description: "Revenue cycle metrics including days in accounts receivable, collection rates, AR aging buckets, and payment method breakdowns"
+      owner: "revenue-cycle-team"
+      steward: "finance-lead"
+      sensitivity: "phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "financial"
+      table: "revenue_cycle"
+      format: "delta"
+    refresh:
+      cadence: "daily"
+      sla_hour: 6
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["billing_id", "total_amount", "billing_date"]
+          threshold: 0.98
+        - metric: "uniqueness"
+          columns: ["billing_id"]
+          threshold: 0.99
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 26
+        - metric: "value_range"
+          column: "collection_rate"
+          min: 0
+          max: 2.0
+    lineage:
+      sources:
+        - "bronze.raw_billing"
+        - "bronze.raw_payments"
+      transforms:
+        - "Aggregate payments per billing record with method breakdown"
+        - "Calculate days_in_ar from billing_date to last_payment_date"
+        - "Compute collection_rate and outstanding_balance"
+        - "Classify into AR aging buckets (0-30, 31-60, 61-90, 91-120, 120+)"
+        - "Add billing_month for trend analysis"
+    tags:
+      contains_phi: "true"
+      business_unit: "revenue-cycle"

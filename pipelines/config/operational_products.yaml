@@ -1,0 +1,94 @@
+products:
+  - product:
+      name: "Bed Utilization Report"
+      slug: "bed-utilization"
+      domain: "operational"
+      description: "Department-level bed utilization metrics including occupancy rates, average length of stay, bed turnover rates, and daily census estimates"
+      owner: "operations-team"
+      steward: "admin-jones"
+      sensitivity: "no_phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "operational"
+      table: "bed_utilization"
+      format: "delta"
+    refresh:
+      cadence: "daily"
+      sla_hour: 5
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["department_id", "department_name", "total_beds", "occupancy_rate"]
+          threshold: 0.95
+        - metric: "uniqueness"
+          columns: ["department_id"]
+          threshold: 1.0
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 26
+        - metric: "value_range"
+          column: "occupancy_rate"
+          min: 0
+          max: 1.0
+    lineage:
+      sources:
+        - "bronze.raw_admissions"
+        - "bronze.raw_rooms_beds"
+        - "bronze.raw_departments"
+      transforms:
+        - "Compute length_of_stay_days per admission"
+        - "Count total, available, and occupied beds per department"
+        - "Aggregate admission metrics per department"
+        - "Calculate occupancy_rate, bed_turnover_rate, avg_daily_census"
+    tags:
+      contains_phi: "false"
+      business_unit: "hospital-operations"
+
+  - product:
+      name: "Appointment Scheduling Analytics"
+      slug: "appointment-analytics"
+      domain: "operational"
+      description: "Doctor-level appointment analytics including no-show rates, cancellation rates, completion rates, and volume rankings by department"
+      owner: "operations-team"
+      steward: "admin-jones"
+      sensitivity: "no_phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "operational"
+      table: "appointment_analytics"
+      format: "delta"
+    refresh:
+      cadence: "daily"
+      sla_hour: 6
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["doctor_id", "total_appointments", "no_show_rate"]
+          threshold: 0.98
+        - metric: "uniqueness"
+          columns: ["doctor_id"]
+          threshold: 1.0
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 26
+        - metric: "value_range"
+          column: "no_show_rate"
+          min: 0
+          max: 1.0
+    lineage:
+      sources:
+        - "bronze.raw_appointments"
+        - "bronze.raw_doctors"
+        - "bronze.raw_departments"
+      transforms:
+        - "Extract time features (hour, day of week) from appointment_date"
+        - "Flag no-shows, cancellations, and completed appointments"
+        - "Aggregate per-doctor metrics with rates"
+        - "Join with doctor and department details"
+        - "Rank doctors by appointment volume"
+        - "Compute hourly appointment distribution"
+    tags:
+      contains_phi: "false"
+      business_unit: "scheduling"

@@ -1,0 +1,101 @@
+products:
+  - product:
+      name: "Population Health Cohorts"
+      slug: "population-health"
+      domain: "research"
+      description: "De-identified population health statistics aggregated by age group and gender with diagnosis prevalence metrics per Safe Harbor methodology"
+      owner: "research-data-team"
+      steward: "research-lead"
+      sensitivity: "no_phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "research"
+      table: "population_health"
+      format: "delta"
+    refresh:
+      cadence: "weekly"
+      sla_hour: 12
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["age_group", "gender", "patient_count"]
+          threshold: 0.99
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 170
+        - metric: "value_range"
+          column: "patient_count"
+          min: 1
+          max: 100000
+    lineage:
+      sources:
+        - "bronze.raw_patients"
+        - "bronze.raw_diagnoses"
+      transforms:
+        - "Compute age from date_of_birth"
+        - "Remove all PHI columns (name, SSN, address, phone, email, DOB)"
+        - "Hash patient_id with SHA-256 for pseudonymization"
+        - "Generalize age into 5-year buckets (90+ for Safe Harbor)"
+        - "Aggregate by age_group and gender for population-level stats"
+        - "Compute diagnosis prevalence (supplementary table)"
+    tags:
+      contains_phi: "false"
+      hipaa_certified: "true"
+      deidentified: "true"
+      deidentification_method: "safe_harbor"
+      business_unit: "research"
+
+  - product:
+      name: "De-identified Research Cohorts"
+      slug: "deidentified-cohorts"
+      domain: "research"
+      description: "Fully de-identified patient cohorts with aggregated encounter, lab, and diagnosis metrics for research. All PHI removed and dates shifted per Safe Harbor."
+      owner: "research-data-team"
+      steward: "research-lead"
+      sensitivity: "no_phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "research"
+      table: "deidentified_cohorts"
+      format: "delta"
+    refresh:
+      cadence: "weekly"
+      sla_hour: 12
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["patient_id", "gender", "age_group", "comorbidity_index"]
+          threshold: 0.95
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 170
+        - metric: "value_range"
+          column: "total_encounters"
+          min: 0
+          max: 10000
+    lineage:
+      sources:
+        - "bronze.raw_patients"
+        - "bronze.raw_encounters"
+        - "bronze.raw_lab_results"
+        - "bronze.raw_diagnoses"
+      transforms:
+        - "Compute age from date_of_birth before removal"
+        - "Aggregate encounter metrics per patient (counts, dates, avg LOS)"
+        - "Aggregate lab metrics per patient (test counts, date ranges)"
+        - "Aggregate diagnosis metrics per patient (unique codes, counts)"
+        - "Hash patient_id with SHA-256"
+        - "Generalize age into 5-year buckets"
+        - "Generalize zip_code to 3-digit prefix"
+        - "Shift all dates by -30 days"
+        - "Remove all remaining PHI columns"
+        - "Classify comorbidity_index and utilization_level"
+    tags:
+      contains_phi: "false"
+      hipaa_certified: "true"
+      deidentified: "true"
+      deidentification_method: "safe_harbor"
+      date_shift_days: "-30"
+      business_unit: "research"

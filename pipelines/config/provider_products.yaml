@@ -1,0 +1,49 @@
+products:
+  - product:
+      name: "Provider Directory"
+      slug: "provider-directory"
+      domain: "provider"
+      description: "Enriched provider directory with patient counts, encounter volumes, appointment statistics, completion rates, and years of service"
+      owner: "provider-data-team"
+      steward: "credentialing-lead"
+      sensitivity: "no_phi"
+      version: "1.0.0"
+    source:
+      catalog: "healthcare_marketplace"
+      schema: "provider"
+      table: "provider_directory"
+      format: "delta"
+    refresh:
+      cadence: "weekly"
+      sla_hour: 8
+    quality:
+      checks:
+        - metric: "completeness"
+          columns: ["doctor_id", "provider_display_name", "specialty", "department_name"]
+          threshold: 0.99
+        - metric: "uniqueness"
+          columns: ["doctor_id"]
+          threshold: 1.0
+        - metric: "freshness"
+          timestamp_column: "_processed_at"
+          max_age_hours: 170
+        - metric: "value_range"
+          column: "no_show_rate"
+          min: 0
+          max: 1.0
+    lineage:
+      sources:
+        - "bronze.raw_doctors"
+        - "bronze.raw_encounters"
+        - "bronze.raw_appointments"
+        - "bronze.raw_departments"
+      transforms:
+        - "Aggregate encounter metrics per doctor (patient count, encounter count)"
+        - "Aggregate appointment metrics per doctor (no-show rate, completion rate)"
+        - "Join with department names"
+        - "Compute years_of_service from hire_date"
+        - "Generate provider_display_name"
+        - "Determine active status based on recent encounters"
+    tags:
+      contains_phi: "false"
+      business_unit: "provider-management"
