@@ -34,10 +34,10 @@ packages/db/prisma/*.db
 packages/db/prisma/migrations/*.sql.bak
 
 # Data (large files)
-data/raw/**/*.csv
-data/raw/**/*.txt
-data/raw/**/*.zip
-!data/raw/.gitkeep
+data/datasets/**/*.csv
+data/datasets/**/*.txt
+data/datasets/**/*.zip
+!data/datasets/.gitkeep
 
 # Python
 __pycache__/

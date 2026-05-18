@@ -1,8 +1,8 @@
 """Bronze layer ingestion: load synthetic healthcare CSVs into Delta tables.
 
-Reads all 15 CSV files from data/raw/synthetic_healthcare/ and writes them
-as Delta tables in the healthcare_marketplace.bronze schema. Each CSV file
-becomes a separate table named raw_{filename_without_extension}.
+Reads all 15 CSV files from data/datasets/ and writes them as Delta tables
+in the healthcare_marketplace.bronze schema. Each CSV file becomes a
+separate table named raw_{filename_without_extension}.
 """
 
 import os
@@ -75,14 +75,14 @@ def find_data_directory() -> str:
         FileNotFoundError: If the data directory cannot be found.
     """
     candidates = [
-        Path(__file__).resolve().parent.parent.parent / "data" / "raw" / "synthetic_healthcare",
-        Path.cwd() / "data" / "raw" / "synthetic_healthcare",
+        Path(__file__).resolve().parent.parent.parent / "data" / "datasets",
+        Path.cwd() / "data" / "datasets",
     ]
     for candidate in candidates:
         if candidate.is_dir():
             return str(candidate)
     raise FileNotFoundError(
-        "Cannot find data/raw/synthetic_healthcare/ directory. "
+        "Cannot find data/datasets/ directory. "
         "Searched: " + ", ".join(str(c) for c in candidates)
     )
 

@@ -1,6 +1,6 @@
 """
 Generate realistic sample healthcare CSV datasets for the Healthcare Data Marketplace.
-Creates 15 CSV files in data/raw/synthetic_healthcare/ covering all 5 domains.
+Creates 15 CSV files in data/datasets/ covering all 5 domains.
 """
 
 import csv
@@ -9,7 +9,7 @@ import random
 from datetime import datetime, timedelta
 
 random.seed(42)
-BASE_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "raw", "synthetic_healthcare")
+BASE_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "datasets")
 os.makedirs(BASE_DIR, exist_ok=True)
 
 # ─── Reference Data ────────────────────────────────────────
