@@ -1,0 +1,406 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Users ──────────────────────────────────────────────
+
+enum UserRole {
+  CONSUMER
+  STEWARD
+  ADMIN
+  ENGINEER
+}
+
+model User {
+  id         String   @id @default(cuid())
+  name       String
+  email      String   @unique
+  password   String?
+  role       UserRole @default(CONSUMER)
+  department String?
+  avatar     String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  ownedProducts    DataProduct[]   @relation("ProductOwner")
+  stewardProducts  DataProduct[]   @relation("ProductSteward")
+  accessRequests   AccessRequest[] @relation("Requester")
+  approvedRequests AccessRequest[] @relation("Approver")
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  reviews          Review[]
+  usageMetrics     UsageMetric[]
+
+  accounts Account[]
+  sessions Session[]
+
+  @@map("users")
+}
+
+// ─── NextAuth.js Models ─────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ─── Data Products ──────────────────────────────────────
+
+enum Domain {
+  CLINICAL
+  OPERATIONAL
+  FINANCIAL
+  PROVIDER
+  RESEARCH
+}
+
+enum Sensitivity {
+  PHI
+  NO_PHI
+  RESTRICTED
+}
+
+enum ProductStatus {
+  DRAFT
+  PUBLISHED
+  DEPRECATED
+}
+
+model DataProduct {
+  id              String        @id @default(cuid())
+  name            String
+  slug            String        @unique
+  description     String        @db.Text
+  domain          Domain
+  sensitivity     Sensitivity
+  status          ProductStatus @default(DRAFT)
+  version         String        @default("1.0.0")
+  ownerId         String
+  stewardId       String
+  catalogName     String
+  schemaName      String
+  tableName       String
+  refreshCadence  String?
+  lastRefreshedAt DateTime?
+  recordCount     Int?
+  sizeBytes       BigInt?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  owner   User @relation("ProductOwner", fields: [ownerId], references: [id])
+  steward User @relation("ProductSteward", fields: [stewardId], references: [id])
+
+  tags            DataProductTag[]
+  qualityScores   QualityScore[]
+  qualitySLAs     QualitySLA[]
+  accessRequests  AccessRequest[]
+  reviews         Review[]
+  columnProfiles  ColumnProfile[]
+  lineageNodes    LineageNode[]
+  usageMetrics    UsageMetric[]
+
+  @@index([domain])
+  @@index([sensitivity])
+  @@index([status])
+  @@index([ownerId])
+  @@map("data_products")
+}
+
+model DataProductTag {
+  id        String @id @default(cuid())
+  productId String
+  key       String
+  value     String
+
+  product DataProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, key])
+  @@map("data_product_tags")
+}
+
+// ─── Quality ────────────────────────────────────────────
+
+model QualityScore {
+  id                   String   @id @default(cuid())
+  productId            String
+  completeness         Float
+  uniqueness           Float
+  freshness            Float
+  referentialIntegrity Float
+  valueRange           Float
+  overallScore         Float
+  checkedAt            DateTime @default(now())
+
+  product DataProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, checkedAt])
+  @@map("quality_scores")
+}
+
+enum QualityMetric {
+  COMPLETENESS
+  UNIQUENESS
+  FRESHNESS
+  REFERENTIAL_INTEGRITY
+  VALUE_RANGE
+}
+
+enum SLAOperator {
+  GTE
+  LTE
+}
+
+model QualitySLA {
+  id            String        @id @default(cuid())
+  productId     String
+  metric        QualityMetric
+  threshold     Float
+  operator      SLAOperator
+  isBreached    Boolean       @default(false)
+  lastCheckedAt DateTime      @default(now())
+
+  product DataProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, metric])
+  @@map("quality_slas")
+}
+
+// ─── Access Requests ────────────────────────────────────
+
+enum AccessRequestStatus {
+  PENDING
+  APPROVED
+  DENIED
+  REVOKED
+  EXPIRED
+}
+
+model AccessRequest {
+  id            String              @id @default(cuid())
+  requesterId   String
+  productId     String
+  justification String              @db.Text
+  status        AccessRequestStatus @default(PENDING)
+  approvedById  String?
+  grantedAt     DateTime?
+  expiresAt     DateTime?
+  denialReason  String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  requester  User        @relation("Requester", fields: [requesterId], references: [id])
+  approvedBy User?       @relation("Approver", fields: [approvedById], references: [id])
+  product    DataProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([requesterId])
+  @@index([productId])
+  @@index([status])
+  @@map("access_requests")
+}
+
+// ─── Audit Log ──────────────────────────────────────────
+
+enum AuditAction {
+  PRODUCT_CREATED
+  PRODUCT_UPDATED
+  PRODUCT_DEPRECATED
+  ACCESS_REQUESTED
+  ACCESS_APPROVED
+  ACCESS_DENIED
+  ACCESS_REVOKED
+  ACCESS_EXPIRED
+  QUALITY_CHECK_RAN
+  SLA_BREACHED
+  USER_LOGIN
+  USER_LOGOUT
+  REVIEW_SUBMITTED
+  DATA_EXPORTED
+  PIPELINE_EXECUTED
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  actorId    String
+  action     AuditAction
+  targetType String
+  targetId   String
+  metadata   Json?
+  ipAddress  String?
+  timestamp  DateTime    @default(now())
+
+  actor User @relation(fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+// ─── Notifications ──────────────────────────────────────
+
+enum NotificationType {
+  ACCESS_APPROVED
+  ACCESS_DENIED
+  ACCESS_REQUESTED
+  ACCESS_EXPIRING
+  QUALITY_ALERT
+  SLA_BREACH
+  NEW_PRODUCT
+  PRODUCT_UPDATED
+  REVIEW_RECEIVED
+  PIPELINE_FAILED
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String           @db.Text
+  linkUrl   String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+// ─── Reviews ────────────────────────────────────────────
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  rating    Int
+  comment   String   @db.Text
+  createdAt DateTime @default(now())
+
+  user    User        @relation(fields: [userId], references: [id])
+  product DataProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("reviews")
+}
+
+// ─── Profiling ──────────────────────────────────────────
+
+model ColumnProfile {
+  id              String  @id @default(cuid())
+  productId       String
+  columnName      String
+  dataType        String
+  nullPercentage  Float
+  distinctCount   Int
+  minValue        String?
+  maxValue        String?
+  meanValue       Float?
+  sampleValues    Json?
+
+  product DataProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, columnName])
+  @@map("column_profiles")
+}
+
+// ─── Lineage ────────────────────────────────────────────
+
+enum LineageNodeType {
+  SOURCE
+  TRANSFORM
+  TARGET
+}
+
+model LineageNode {
+  id          String          @id @default(cuid())
+  productId   String
+  nodeType    LineageNodeType
+  name        String
+  description String?
+  metadata    Json?
+
+  product     DataProduct  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  outEdges    LineageEdge[] @relation("SourceNode")
+  inEdges     LineageEdge[] @relation("TargetNode")
+
+  @@map("lineage_nodes")
+}
+
+model LineageEdge {
+  id                   String  @id @default(cuid())
+  sourceNodeId         String
+  targetNodeId         String
+  transformDescription String?
+
+  sourceNode LineageNode @relation("SourceNode", fields: [sourceNodeId], references: [id], onDelete: Cascade)
+  targetNode LineageNode @relation("TargetNode", fields: [targetNodeId], references: [id], onDelete: Cascade)
+
+  @@map("lineage_edges")
+}
+
+// ─── Usage Metrics ──────────────────────────────────────
+
+enum UsageAction {
+  VIEW
+  DOWNLOAD
+  QUERY
+  API_ACCESS
+}
+
+model UsageMetric {
+  id        String      @id @default(cuid())
+  productId String
+  userId    String
+  action    UsageAction
+  timestamp DateTime    @default(now())
+
+  product DataProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user    User        @relation(fields: [userId], references: [id])
+
+  @@index([productId, timestamp])
+  @@index([userId])
+  @@map("usage_metrics")
+}
